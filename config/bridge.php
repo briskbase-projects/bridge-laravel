@@ -45,4 +45,10 @@ return [
      */
     'timeout' => (int) env('BRIDGE_TIMEOUT', 15),
 
+    /*
+     | Set to false in local development when using self-signed TLS certificates
+     | (e.g. Laravel Valet). Never disable in production.
+     */
+    'verify_ssl' => (bool) env('BRIDGE_VERIFY_SSL', true),
+
 ];

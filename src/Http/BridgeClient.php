@@ -27,6 +27,7 @@ final class BridgeClient
         private readonly int $timeout,
         private readonly string $defaultCurrency,
         private readonly string $defaultCountry,
+        private readonly bool $verifySsl = true,
     ) {}
 
     /**
@@ -136,6 +137,10 @@ final class BridgeClient
 
         try {
             $http = Http::withHeaders($headers)->timeout($this->timeout);
+
+            if (! $this->verifySsl) {
+                $http = $http->withoutVerifying();
+            }
 
             $response = $payload === []
                 ? $http->send($method, $this->baseUrl . $path)

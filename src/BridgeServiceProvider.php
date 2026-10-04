@@ -23,6 +23,7 @@ final class BridgeServiceProvider extends ServiceProvider
                 timeout: (int) $config['timeout'],
                 defaultCurrency: (string) $config['currency'],
                 defaultCountry: (string) $config['country'],
+                verifySsl: (bool) ($config['verify_ssl'] ?? true),
             );
         });
     }
