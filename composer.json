@@ -1,0 +1,43 @@
+{
+    "name": "briskbase/bridge-laravel",
+    "description": "Laravel SDK for Briskbase Bridge — create checkout sessions, verify webhooks, listen to payment events.",
+    "type": "library",
+    "license": "MIT",
+    "version": "1.0.0",
+    "require": {
+        "php": "^8.2",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Briskbase\\Bridge\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Briskbase\\Bridge\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Briskbase\\Bridge\\BridgeServiceProvider"
+            ],
+            "aliases": {
+                "Bridge": "Briskbase\\Bridge\\Facades\\Bridge"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
