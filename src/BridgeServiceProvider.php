@@ -24,6 +24,7 @@ final class BridgeServiceProvider extends ServiceProvider
                 defaultCurrency: (string) $config['currency'],
                 defaultCountry: (string) $config['country'],
                 verifySsl: (bool) ($config['verify_ssl'] ?? true),
+                webhookSecret: (string) ($config['webhook_secret'] ?? ''),
             );
         });
     }

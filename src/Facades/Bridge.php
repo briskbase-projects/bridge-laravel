@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static CheckoutSession createCheckoutSession(int $amount, string $externalReference, string $successUrl, string $cancelUrl, string $purpose = 'one_time', ?string $idempotencyKey = null, string $currency = '', string $country = '')
  * @method static CheckoutSession getCheckoutSession(string $sessionId)
+ * @method static bool verifyRedirectSignature(array $params, int $tolerance = 900)
  * @method static array whoami()
  * @method static array request(string $method, string $path, array $payload = [], ?string $idempotencyKey = null)
  *

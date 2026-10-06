@@ -28,6 +28,7 @@ final class BridgeClient
         private readonly string $defaultCurrency,
         private readonly string $defaultCountry,
         private readonly bool $verifySsl = true,
+        private readonly string $webhookSecret = '',
     ) {}
 
     /**
@@ -37,7 +38,7 @@ final class BridgeClient
      * @param  string  $externalReference Your internal order/payment ID (used to match the webhook)
      * @param  string  $successUrl        Where to redirect after payment
      * @param  string  $cancelUrl         Where to redirect on cancellation
-     * @param  string  $purpose           'subscription' | 'addon' | 'license' | 'one_time'
+     * @param  string  $purpose           'one_time' | 'addon' | 'license'
      * @param  string|null $idempotencyKey Reuse the same key when retrying the same purchase
      * @return CheckoutSession
      */
@@ -102,6 +103,44 @@ final class BridgeClient
     }
 
     /**
+     * Verify the signature appended to a Bridge success/cancel redirect URL.
+     *
+     * Bridge signs the redirect with the same secret used for webhooks:
+     *   sig = HMAC-SHA256(webhook_secret, "session_id|status|external_reference|ts")
+     *
+     * Returns true only when the signature is valid AND the timestamp is within
+     * the tolerance window. Always returns false when the webhook secret is not
+     * configured or the sig param is missing.
+     *
+     * @param  array<string, string>  $params  The query string parameters from the redirect URL
+     * @param  int  $tolerance  Max age in seconds (default 900 = 15 min, generous for browser latency)
+     */
+    public function verifyRedirectSignature(array $params, int $tolerance = 900): bool
+    {
+        if ($this->webhookSecret === '' || ! isset($params['sig'], $params['ts'])) {
+            return false;
+        }
+
+        if (abs(time() - (int) $params['ts']) > $tolerance) {
+            return false;
+        }
+
+        // Order must match ProductRedirect::build() in the Bridge server:
+        // implode('|', ['session_id' => ..., 'status' => ..., 'external_reference' => ..., 'ts' => ...])
+        $message = implode('|', [
+            $params['session_id'] ?? '',
+            $params['status'] ?? '',
+            $params['external_reference'] ?? '',
+            $params['ts'] ?? '',
+        ]);
+
+        return hash_equals(
+            hash_hmac('sha256', $message, $this->webhookSecret),
+            $params['sig'],
+        );
+    }
+
+    /**
      * Send a signed request to Bridge and return the decoded JSON body.
      *
      * @throws BridgeException on HTTP 4xx/5xx or connection failure
@@ -150,7 +189,8 @@ final class BridgeClient
         }
 
         if ($response->failed()) {
-            $msg = $response->json('message') ?? $response->json('error') ?? 'HTTP ' . $response->status();
+            $raw = $response->json('message') ?? $response->json('error') ?? 'HTTP ' . $response->status();
+            $msg = is_array($raw) ? json_encode($raw) : (string) $raw;
             throw new BridgeException("Bridge API error [{$response->status()}]: {$msg}");
         }
 
