@@ -3,7 +3,7 @@
     "description": "Laravel SDK for Briskbase Bridge — create checkout sessions, verify webhooks, listen to payment events.",
     "type": "library",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "require": {
         "php": "^8.2",
         "illuminate/contracts": "^11.0|^12.0|^13.0",
