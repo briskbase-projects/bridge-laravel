@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Briskbase\Bridge\Http;
 
 use Briskbase\Bridge\Data\CheckoutSession;
+use Briskbase\Bridge\Data\Subscription;
 use Briskbase\Bridge\Exceptions\BridgeException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -112,6 +113,85 @@ final class BridgeClient
     }
 
     /**
+     * Start a recurring charge described by its terms (any amount; no plan to set up in advance).
+     * Send the customer to `$subscription->subscribeUrl`; the first charge, every renewal and every
+     * failure then arrive as `BridgeSubscriptionEvent` webhooks.
+     *
+     * Throws a BridgeException with code `payment_not_supported` / `plan_not_available` when no payment
+     * method for this customer's country and currency can take a subscription: fall back to a one-time
+     * checkout in that case.
+     *
+     * @param  int  $amount  Minor units charged every period
+     * @param  string  $interval  'month' or 'year'
+     * @param  int  $intervalCount  Charge every N intervals (3 months = quarterly)
+     * @param  string  $name  What the customer reads on the receipt, e.g. "Website app - Monthly subscription"
+     * @param  array{email?: string|null, name?: string|null, phone?: string|null}|null  $customer
+     */
+    public function createSubscription(
+        int $amount,
+        string $name,
+        string $interval,
+        string $successUrl,
+        string $cancelUrl,
+        string $externalReference,
+        string $currency = '',
+        string $country = '',
+        int $intervalCount = 1,
+        ?array $customer = null,
+        ?array $metadata = null,
+        ?string $idempotencyKey = null,
+    ): Subscription {
+        $payload = array_filter([
+            'terms' => [
+                'amount' => $amount,
+                'currency' => $currency ?: $this->defaultCurrency,
+                'interval' => $interval,
+                'interval_count' => $intervalCount,
+                'name' => $name,
+            ],
+            'country' => $country ?: $this->defaultCountry,
+            'external_reference' => $externalReference,
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+            'customer' => $customer === null ? null : array_filter($customer, fn ($v) => $v !== null && $v !== ''),
+            'metadata' => $metadata,
+        ], fn ($value) => $value !== null && $value !== []);
+
+        return Subscription::fromArray($this->request('POST', '/api/v1/subscriptions', $payload, $idempotencyKey ?? (string) Str::uuid()));
+    }
+
+    public function getSubscription(string $subscriptionId): Subscription
+    {
+        return Subscription::fromArray($this->request('GET', "/api/v1/subscriptions/{$subscriptionId}"));
+    }
+
+    /** Stop billing now. For "do not renew, but keep what I paid for" use setAutoRenew(false). */
+    public function cancelSubscription(string $subscriptionId): Subscription
+    {
+        return Subscription::fromArray($this->request('POST', "/api/v1/subscriptions/{$subscriptionId}/cancel", [], (string) Str::uuid()));
+    }
+
+    /**
+     * Switch automatic renewal off (`false`: charging stops when the paid period ends, access stays until then)
+     * or back on (`true`).
+     */
+    public function setAutoRenew(string $subscriptionId, bool $enabled): Subscription
+    {
+        return Subscription::fromArray($this->request('POST', "/api/v1/subscriptions/{$subscriptionId}/auto-renew", ['enabled' => $enabled], (string) Str::uuid()));
+    }
+
+    /** A hosted page where the customer replaces the card used for renewals (use after a failed charge). */
+    public function paymentMethodUpdateUrl(string $subscriptionId, string $successUrl, string $cancelUrl): string
+    {
+        $response = $this->request('POST', "/api/v1/subscriptions/{$subscriptionId}/payment-method", [
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+        ]);
+
+        return (string) ($response['url'] ?? '');
+    }
+
+    /**
      * Verify credentials and return product info.
      */
     public function whoami(): array
@@ -144,8 +224,9 @@ final class BridgeClient
 
         // Order must match ProductRedirect::build() in the Bridge server:
         // implode('|', ['session_id' => ..., 'status' => ..., 'external_reference' => ..., 'ts' => ...])
+        // Subscription returns carry `subscription_id` in the same place `session_id` takes for payments.
         $message = implode('|', [
-            $params['session_id'] ?? '',
+            $params['session_id'] ?? $params['subscription_id'] ?? '',
             $params['status'] ?? '',
             $params['external_reference'] ?? '',
             $params['ts'] ?? '',
@@ -208,7 +289,11 @@ final class BridgeClient
         if ($response->failed()) {
             $raw = $response->json('message') ?? $response->json('error') ?? 'HTTP ' . $response->status();
             $msg = is_array($raw) ? json_encode($raw) : (string) $raw;
-            throw new BridgeException("Bridge API error [{$response->status()}]: {$msg}");
+            $exception = new BridgeException("Bridge API error [{$response->status()}]: {$msg}");
+            $exception->httpStatus = $response->status();
+            $exception->errorCode = is_string($response->json('error.code')) ? $response->json('error.code') : null;
+
+            throw $exception;
         }
 
         return $response->json() ?? [];

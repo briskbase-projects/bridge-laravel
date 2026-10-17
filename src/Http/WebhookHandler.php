@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Briskbase\Bridge\Http;
 
+use Briskbase\Bridge\Data\Subscription;
 use Briskbase\Bridge\Events\BridgePaymentFailed;
+use Briskbase\Bridge\Events\BridgeSubscriptionEvent;
 use Briskbase\Bridge\Events\BridgePaymentSucceeded;
 use Briskbase\Bridge\Exceptions\WebhookSignatureException;
 use Illuminate\Http\Request;
@@ -57,7 +59,15 @@ final class WebhookHandler
                 eventType: $eventType,
                 payload: $payload,
             ),
-            default => null,
+            default => str_starts_with($eventType, 'subscription.') ? BridgeSubscriptionEvent::dispatch(
+                eventId: (string) ($payload['id'] ?? ''),
+                type: $eventType,
+                subscription: Subscription::fromArray((array) ($data['subscription'] ?? [])),
+                chargeId: isset($data['charge']['id']) ? (string) $data['charge']['id'] : null,
+                chargeAmount: isset($data['charge']['amount']) ? (int) $data['charge']['amount'] : null,
+                chargeCurrency: isset($data['charge']['currency']) ? (string) $data['charge']['currency'] : null,
+                payload: $payload,
+            ) : null,
         };
 
         return response()->noContent();
