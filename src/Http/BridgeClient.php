@@ -51,6 +51,9 @@ final class BridgeClient
         ?string $idempotencyKey = null,
         string $currency = '',
         string $country = '',
+        ?string $description = null,
+        ?array $customer = null,
+        ?array $metadata = null,
     ): CheckoutSession {
         $payload = [
             'amount' => $amount,
@@ -61,6 +64,20 @@ final class BridgeClient
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
         ];
+
+        // Optional extras. `description` is what the customer sees on the payment page and on the
+        // gateway receipt; `customer` (email, name, phone) prefills the payment form.
+        if ($description !== null && trim($description) !== '') {
+            $payload['description'] = mb_substr(trim($description), 0, 255);
+        }
+
+        if ($customer !== null && ($customer = array_filter($customer, fn ($v) => $v !== null && $v !== '')) !== []) {
+            $payload['customer'] = $customer;
+        }
+
+        if ($metadata !== null && $metadata !== []) {
+            $payload['metadata'] = $metadata;
+        }
 
         $response = $this->request(
             method: 'POST',
